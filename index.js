@@ -1,42 +1,86 @@
 const express = require('express');
-const sql = require('mssql');
 const cors = require('cors');
+const { Sequelize, DataTypes } = require('sequelize');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Configura la conexión a SQL Server
-const config = {
-  user: 'ANTHONY',
-  password: 'lgp911',
-  server: 'localhost',
-  database: 'CertificacionesDB',
-  options: {
-    encrypt: false, // si es local, déjalo en false
-    trustServerCertificate: true
+// 🔧 Conexión PostgreSQL vía Sequelize (Railway)
+const sequelize = new Sequelize('railway', 'postgres', 'RKzSEUyULQYpgahvfhInHbIFWbrvfHdA', {
+  host: 'turntable.proxy.rlwy.net',
+  port: 12021,
+  dialect: 'postgres',
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false
+    }
   }
-};
+});
 
-// Ruta para validar el código
+// ✅ Modelo Sequelize para certificaciones
+const Certificacion = sequelize.define('certificaciones', {
+  codigo: {
+    type: DataTypes.STRING,
+    primaryKey: true
+  },
+  razon: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  nombre: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  tipo: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  fecha_emision: {
+    type: DataTypes.DATE,
+    allowNull: false
+  }
+}, {
+  timestamps: false,
+  freezeTableName: true
+});
+
+// 🔁 Endpoint de validación
 app.get('/validar/:codigo', async (req, res) => {
   const { codigo } = req.params;
 
   try {
-    await sql.connect(config);
-    const result = await sql.query`SELECT * FROM Certificaciones WHERE codigo = ${codigo}`;
+    const resultado = await Certificacion.findOne({
+      attributes: ['razon', 'nombre', 'tipo', 'fecha_emision'],
+      where: { codigo }
+    });
 
-    if (result.recordset.length > 0) {
-      res.json({ valido: true, datos: result.recordset[0] });
+    if (resultado) {
+      res.json({
+        valido: true,
+        datosCertificacion: resultado
+      });
     } else {
-      res.json({ valido: false });
+      res.json({
+        valido: false,
+        mensaje: 'Código no encontrado'
+      });
     }
-  } catch (err) {
-    console.error('Error en consulta:', err);
-    res.status(500).send('Error interno del servidor');
+  } catch (error) {
+    console.error('Error en la validación:', error);
+    res.status(500).send('Error interno al validar el código');
   }
 });
 
-app.listen(3000, () => {
-  console.log('API corriendo en http://localhost:3000');
+// 🚀 Iniciar servidor
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+  try {
+    await sequelize.authenticate();
+    console.log('✅ Conexión a PostgreSQL exitosa');
+    console.log(`🚀 API corriendo en http://localhost:${PORT}`);
+  } catch (err) {
+    console.error('❌ Error al conectar con PostgreSQL:', err);
+  }
 });
